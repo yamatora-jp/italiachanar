@@ -1,92 +1,105 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Babylon.js WebXR AR + PLY</title>
+  <meta charset="utf-8">
+  <title>Babylon.js + AR.js Marker AR</title>
+
+  <!-- Babylon.js -->
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
+
+  <!-- AR.js for Babylon.js -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/examples/babylon/babylon.js"></script>
 </head>
-<body>
-  <canvas id="renderCanvas" touch-action="none"></canvas>
+<body style="margin: 0; overflow: hidden;">
+  <canvas id="renderCanvas"></canvas>
+
   <script>
+    // Babylon.js エンジン
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true);
 
-    const createScene = async () => {
-      const scene = new BABYLON.Scene(engine);
+    // シーン作成
+    const scene = new BABYLON.Scene(engine);
 
-      const camera = new BABYLON.ArcRotateCamera("camera",
-        Math.PI / 2, Math.PI / 2.5, 2, BABYLON.Vector3.Zero(), scene);
-      camera.attachControl(canvas, true);
+    // カメラ (AR.js が制御)
+    const camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 0, 0), scene);
 
-      const light = new BABYLON.HemisphericLight("light",
-        new BABYLON.Vector3(0, 1, 0), scene);
+    // ライト
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-      // 🔹 PLY点群読み込み
-      async function loadColoredPLY(url) {
-        const response = await fetch(url);
-        const text = await response.text();
+    // 🔹 PLY点群を読み込み
+    async function loadColoredPLY(url) {
+      const response = await fetch(url);
+      const text = await response.text();
 
-        const lines = text.split("\n");
-        let inHeader = true;
-        let vertices = [];
+      const lines = text.split("\n");
+      let inHeader = true;
+      let vertices = [];
 
-        for (let line of lines) {
-          if (inHeader) {
-            if (line.startsWith("end_header")) {
-              inHeader = false;
-            }
-          } else {
-            if (line.trim().length === 0) continue;
-            const parts = line.trim().split(/\s+/).map(Number);
-            if (parts.length >= 6) {
-              vertices.push({
-                position: new BABYLON.Vector3(parts[0], parts[1], parts[2]),
-                color: new BABYLON.Color4(parts[3] / 255, parts[4] / 255, parts[5] / 255, 1.0),
-              });
-            }
+      for (let line of lines) {
+        if (inHeader) {
+          if (line.startsWith("end_header")) {
+            inHeader = false;
+          }
+        } else {
+          if (line.trim().length === 0) continue;
+          const parts = line.trim().split(/\s+/).map(Number);
+          if (parts.length >= 6) {
+            vertices.push({
+              position: new BABYLON.Vector3(parts[0], parts[1], parts[2]),
+              color: new BABYLON.Color4(parts[3] / 255, parts[4] / 255, parts[5] / 255, 1.0),
+            });
           }
         }
-
-        const pcs = new BABYLON.PointsCloudSystem("pcs", { capacity: vertices.length }, scene);
-        vertices.forEach(v => {
-          pcs.addParticle({
-            positionFunction: (p) => {
-              p.position = v.position;
-              p.color = v.color;
-            }
-          });
-        });
-        await pcs.buildMeshAsync();
-        pcs.mesh.scaling = new BABYLON.Vector3(0.01, 0.01, 0.01);
-        return pcs.mesh;
       }
 
-      const pcsMesh = await loadColoredPLY("./gs_italiachan.splat");
-
-      // 🔹 WebXR AR起動
-      const xrHelper = await scene.createDefaultXRExperienceAsync({
-        uiOptions: { sessionMode: "immersive-ar" },
-        optionalFeatures: ["hit-test"],
-      });
-
-      // タップした位置に配置する
-      xrHelper.baseExperience.sessionManager.onXRSessionInit.add(() => {
-        xrHelper.baseExperience.featuresManager.enableFeature(
-          BABYLON.WebXRHitTest.Name,
-          "latest",
-          {
-            offsetRay: new BABYLON.Ray(new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, -1))
+      const pcs = new BABYLON.PointsCloudSystem("pcs", { capacity: vertices.length }, scene);
+      vertices.forEach(v => {
+        pcs.addParticle({
+          positionFunction: (p) => {
+            p.position = v.position;
+            p.color = v.color;
           }
-        );
+        });
       });
+      await pcs.buildMeshAsync();
+      pcs.mesh.scaling = new BABYLON.Vector3(0.01, 0.01, 0.01);
+      return pcs.mesh;
+    }
 
-      return scene;
-    };
+    // マーカーにアタッチされるグループ
+    const markerRoot = new BABYLON.TransformNode("markerRoot", scene);
 
-    createScene().then(scene => {
-      engine.runRenderLoop(() => {
-        scene.render();
-      });
+    // PLYモデルをロードしてマーカーに乗せる
+    loadColoredPLY("./gs_italiachan.splat").then(mesh => {
+      mesh.parent = markerRoot;
+    });
+
+    // AR.js カメラ設定
+    const arToolkitSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
+    const arToolkitContext = new THREEx.ArToolkitContext({ cameraParametersUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/examples/marker-training/examples/marker-training/examples/camera_para.dat' });
+
+    // 初期化
+    arToolkitSource.init(() => {
+      setTimeout(() => {
+        arToolkitContext.arController.init(function onCompleted() {
+          camera.projectionMatrix.fromArray(arToolkitContext.getProjectionMatrix());
+        });
+      }, 2000);
+    });
+
+    // マーカーコントロール
+    const markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
+      type: 'pattern',
+      patternUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/examples/marker-training/examples/pattern-files/pattern-hiro.patt',
+    });
+
+    // レンダリングループ
+    engine.runRenderLoop(() => {
+      if (arToolkitSource.ready) {
+        arToolkitContext.update(arToolkitSource.domElement);
+      }
+      scene.render();
     });
   </script>
 </body>
