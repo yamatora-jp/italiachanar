@@ -81,7 +81,7 @@
       const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), babylonScene);
 
       // 🔹 PLY点群を読み込み
-      const pcsMesh = await loadColoredPLY(babylonScene, "./gs_italiachan_ascii.ply");
+      const pcsMesh = await loadColoredPLY(babylonScene, "./gs_italiachan.splat");
 
       // 🔹 ARマーカーに関連付け
       const anchor = mindarThree.addAnchor(0); // 0 = 最初のマーカー
@@ -98,3 +98,4 @@
   </script>
 </body>
 </html>
+
