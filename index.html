@@ -64,5 +64,30 @@
       const pcsMesh = await loadColoredPLY("./gs_italiachan.splat");
 
       // 🔹 WebXR AR起動
-      const xrHelper = await scene.createD
+      const xrHelper = await scene.createDefaultXRExperienceAsync({
+        uiOptions: { sessionMode: "immersive-ar" },
+        optionalFeatures: ["hit-test"],
+      });
 
+      // タップした位置に配置する
+      xrHelper.baseExperience.sessionManager.onXRSessionInit.add(() => {
+        xrHelper.baseExperience.featuresManager.enableFeature(
+          BABYLON.WebXRHitTest.Name,
+          "latest",
+          {
+            offsetRay: new BABYLON.Ray(new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, -1))
+          }
+        );
+      });
+
+      return scene;
+    };
+
+    createScene().then(scene => {
+      engine.runRenderLoop(() => {
+        scene.render();
+      });
+    });
+  </script>
+</body>
+</html>
