@@ -7,99 +7,46 @@
   <!-- Babylon.js -->
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
 
-  <!-- AR.js for Babylon.js -->
+  <!-- AR.js Babylon.js binding -->
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/examples/babylon/aframe-babylon.js"></script>
-  <!--  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/examples/babylon/babylon.js"></script> -->
 </head>
 <body style="margin: 0; overflow: hidden;">
   <canvas id="renderCanvas"></canvas>
 
   <script>
-    // Babylon.js エンジン
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true);
-
-    // シーン作成
     const scene = new BABYLON.Scene(engine);
 
-    // カメラ (AR.js が制御)
-    const camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 0, 0), scene);
+    // カメラは AR.js が制御
+    const camera = new BABYLON.Camera("camera", scene);
 
     // ライト
-    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-    // 🔹 PLY点群を読み込み
-    async function loadColoredPLY(url) {
-      const response = await fetch(url);
-      const text = await response.text();
-
-      const lines = text.split("\n");
-      let inHeader = true;
-      let vertices = [];
-
-      for (let line of lines) {
-        if (inHeader) {
-          if (line.startsWith("end_header")) {
-            inHeader = false;
-          }
-        } else {
-          if (line.trim().length === 0) continue;
-          const parts = line.trim().split(/\s+/).map(Number);
-          if (parts.length >= 6) {
-            vertices.push({
-              position: new BABYLON.Vector3(parts[0], parts[1], parts[2]),
-              color: new BABYLON.Color4(parts[3] / 255, parts[4] / 255, parts[5] / 255, 1.0),
-            });
-          }
-        }
-      }
-
-      const pcs = new BABYLON.PointsCloudSystem("pcs", { capacity: vertices.length }, scene);
-      vertices.forEach(v => {
-        pcs.addParticle({
-          positionFunction: (p) => {
-            p.position = v.position;
-            p.color = v.color;
-          }
-        });
-      });
-      await pcs.buildMeshAsync();
-      pcs.mesh.scaling = new BABYLON.Vector3(0.01, 0.01, 0.01);
-      return pcs.mesh;
-    }
-
-    // マーカーにアタッチされるグループ
+    // マーカー root
     const markerRoot = new BABYLON.TransformNode("markerRoot", scene);
 
-    // PLYモデルをロードしてマーカーに乗せる
+    // ここにPLYモデルをロードして markerRoot に追加
     loadColoredPLY("./gs_italiachan.splat").then(mesh => {
       mesh.parent = markerRoot;
     });
 
-    // AR.js カメラ設定
-    const arToolkitSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
-    const arToolkitContext = new THREEx.ArToolkitContext({ cameraParametersUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/examples/marker-training/examples/marker-training/examples/camera_para.dat' });
-
-    // 初期化
-    arToolkitSource.init(() => {
-      setTimeout(() => {
-        arToolkitContext.arController.init(function onCompleted() {
-          camera.projectionMatrix.fromArray(arToolkitContext.getProjectionMatrix());
-        });
-      }, 2000);
+    // AR.js Babylon 初期化
+    const arToolkit = new ARjsBabylon(engine, scene, camera, {
+      sourceType: 'webcam',
+      detectionMode: 'mono',
+      matrixCodeType: '3x3',
     });
 
-    // マーカーコントロール
-    const markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
+    // Hiroマーカー検出
+    const marker = arToolkit.addMarker(markerRoot, {
       type: 'pattern',
       patternUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/examples/marker-training/examples/pattern-files/pattern-hiro.patt',
     });
 
-    // レンダリングループ
+    // Render loop
     engine.runRenderLoop(() => {
-      if (arToolkitSource.ready) {
-        arToolkitContext.update(arToolkitSource.domElement);
-      }
       scene.render();
     });
   </script>
