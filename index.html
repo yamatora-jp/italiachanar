@@ -27,7 +27,47 @@
     // マーカー root
     const markerRoot = new BABYLON.TransformNode("markerRoot", scene);
 
-    // ここにPLYモデルをロードして markerRoot に追加
+    // 🔹 PLY点群を読み込む関数
+    async function loadColoredPLY(url) {
+      const response = await fetch(url);
+      const text = await response.text();
+
+      const lines = text.split("\n");
+      let inHeader = true;
+      let vertices = [];
+
+      for (let line of lines) {
+        if (inHeader) {
+          if (line.startsWith("end_header")) {
+            inHeader = false;
+          }
+        } else {
+          if (line.trim().length === 0) continue;
+          const parts = line.trim().split(/\s+/).map(Number);
+          if (parts.length >= 6) {
+            vertices.push({
+              position: new BABYLON.Vector3(parts[0], parts[1], parts[2]),
+              color: new BABYLON.Color4(parts[3] / 255, parts[4] / 255, parts[5] / 255, 1.0),
+            });
+          }
+        }
+      }
+
+      const pcs = new BABYLON.PointsCloudSystem("pcs", { capacity: vertices.length }, scene);
+      vertices.forEach(v => {
+        pcs.addParticle({
+          positionFunction: (p) => {
+            p.position = v.position;
+            p.color = v.color;
+          }
+        });
+      });
+      await pcs.buildMeshAsync();
+      pcs.mesh.scaling = new BABYLON.Vector3(0.01, 0.01, 0.01);
+      return pcs.mesh;
+    }
+
+    // 🔹 PLYモデルをロードしてマーカーに追加
     loadColoredPLY("./gs_italiachan.splat").then(mesh => {
       mesh.parent = markerRoot;
     });
@@ -40,12 +80,12 @@
     });
 
     // Hiroマーカー検出
-    const marker = arToolkit.addMarker(markerRoot, {
+    arToolkit.addMarker(markerRoot, {
       type: 'pattern',
       patternUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/examples/marker-training/examples/pattern-files/pattern-hiro.patt',
     });
 
-    // Render loop
+    // レンダリングループ
     engine.runRenderLoop(() => {
       scene.render();
     });
